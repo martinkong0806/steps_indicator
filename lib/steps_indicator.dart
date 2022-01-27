@@ -1,10 +1,13 @@
 library steps_indicator;
 
+import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:steps_indicator/linear_painter.dart';
 import 'package:steps_indicator/step_widget.dart';
+
+const int LINE_DURATION = 400;
 
 /// Custom StepsIndicator to display a line with different kind of steps
 class StepsIndicator extends StatefulWidget {
@@ -36,7 +39,7 @@ class StepsIndicator extends StatefulWidget {
   final Color undoneLineColor;
 
   /// Make it horizontal or vertical [default = true]
-  final bool isHorizontal;
+  final Axis direction;
 
   /// Length for each line [default = 40]
   final double lineLength;
@@ -61,9 +64,9 @@ class StepsIndicator extends StatefulWidget {
 
   /// Unselected step border size [default = 14]
   final double unselectedStepBorderSize;
-  final Widget Function(int)? doneStepWidget;
-  final Widget Function(int)? unselectedStepWidget;
-  final Widget Function(int)? selectedStepWidget;
+  final Widget Function(int, double?)? doneStepWidget;
+  final Widget Function(int, double?)? unselectedStepWidget;
+  final Widget Function(int, double?)? selectedStepWidget;
   final List<StepsIndicatorCustomLine>? lineLengthCustomStep;
 
   final AnimationController? animationControllerSelectedStep;
@@ -86,7 +89,7 @@ class StepsIndicator extends StatefulWidget {
       this.unselectedStepColorIn = Colors.blue,
       this.doneLineColor = Colors.blue,
       this.undoneLineColor = Colors.blue,
-      this.isHorizontal = true,
+      this.direction = Axis.horizontal,
       this.lineLength = 40,
       this.doneLineThickness = 1,
       this.undoneLineThickness = 1,
@@ -119,6 +122,7 @@ class _StepsIndicatorState extends State<StepsIndicator>
   late AnimationController _animationControllerToNext;
   late Animation _animationToNext;
   double _percentToNext = 0;
+  int _stepDifference = 0;
 
   late AnimationController _animationControllerToPrevious;
   late Animation _animationToPrevious;
@@ -134,19 +138,20 @@ class _StepsIndicatorState extends State<StepsIndicator>
   void initState() {
     super.initState();
     _animationControllerToNext = AnimationController(
-        duration: const Duration(milliseconds: 400), vsync: this);
+        duration: const Duration(milliseconds: LINE_DURATION), vsync: this);
     _animationControllerToPrevious = AnimationController(
-        duration: const Duration(milliseconds: 400), vsync: this);
+        duration: const Duration(milliseconds: LINE_DURATION), vsync: this);
     _animationControllerSelectedStep = widget.animationControllerSelectedStep ??
         AnimationController(
-            duration: const Duration(milliseconds: 400), vsync: this);
+            duration: const Duration(milliseconds: LINE_DURATION), vsync: this);
     _animationControllerDoneStep = widget.animationControllerDoneStep ??
         AnimationController(
-            duration: const Duration(milliseconds: 400), vsync: this);
+            duration: const Duration(milliseconds: LINE_DURATION), vsync: this);
     _animationControllerUnselectedStep =
         widget.animationControllerUnselectedStep ??
             AnimationController(
-                duration: const Duration(milliseconds: 400), vsync: this);
+                duration: const Duration(milliseconds: LINE_DURATION),
+                vsync: this);
   }
 
   /// Dispose all animation controller
@@ -181,11 +186,15 @@ class _StepsIndicatorState extends State<StepsIndicator>
 
     if (widget.enableLineAnimation) {
       if (widget.selectedStep > oldWidget.selectedStep) {
+        _stepDifference = widget.selectedStep - oldWidget.selectedStep;
         _animationControllerToNext.reset();
         setState(() {
           _animationToNext = Tween(begin: 0.0, end: 1.0).animate(
             CurvedAnimation(
-                parent: _animationControllerToNext, curve: Curves.linear),
+                parent: _animationControllerToNext
+                  ..duration =
+                      Duration(milliseconds: LINE_DURATION * _stepDifference),
+                curve: Curves.easeOutCubic),
           )..addListener(() {
               setState(() {
                 _percentToNext = _animationToNext.value;
@@ -199,7 +208,8 @@ class _StepsIndicatorState extends State<StepsIndicator>
           _isPreviousLine = true;
           _animationToPrevious = Tween(begin: 1.0, end: 0.0).animate(
             CurvedAnimation(
-                parent: _animationControllerToPrevious, curve: Curves.linear),
+                parent: _animationControllerToPrevious,
+                curve: Curves.easeOutCubic),
           )..addListener(() {
               setState(() {
                 _percentToPrevious = _animationToPrevious.value;
@@ -218,7 +228,7 @@ class _StepsIndicatorState extends State<StepsIndicator>
   /// Build the complete StepsIndicator widget
   @override
   Widget build(BuildContext context) {
-    if (widget.isHorizontal) {
+    if (widget.direction == Axis.horizontal) {
       // Display in Row
       return ConstrainedBox(
         constraints: BoxConstraints(
@@ -257,7 +267,7 @@ class _StepsIndicatorState extends State<StepsIndicator>
 
   /// A function to return the right widget according to the index [i]
   Widget stepBuilder(int i) {
-    if (widget.isHorizontal) {
+    if (widget.direction == Axis.horizontal) {
       // Display in Row
       return widget.selectedStep == i
           ? Row(
@@ -331,11 +341,12 @@ class _StepsIndicatorState extends State<StepsIndicator>
         builder: (BuildContext context, Widget? child) {
           final size = widget.unselectedStepSize +
               1 * _animationControllerUnselectedStep.value;
+          final progress = _animationControllerSelectedStep.value;
           if (widget.unselectedStepWidget != null) {
             return Container(
                 width: size,
                 height: size,
-                child: widget.unselectedStepWidget!(i));
+                child: widget.unselectedStepWidget!(i, progress));
           } else {
             return Container(
               width: size,
@@ -352,7 +363,7 @@ class _StepsIndicatorState extends State<StepsIndicator>
     }
 
     if (widget.unselectedStepWidget != null) {
-      return widget.unselectedStepWidget!(i);
+      return widget.unselectedStepWidget!(i, null);
     } else {
       return StepWidget().generateSelectedStepWidget(
           colorIn: widget.unselectedStepColorIn,
@@ -365,24 +376,27 @@ class _StepsIndicatorState extends State<StepsIndicator>
   /// A function to return the selected step widget
   /// Index [i] is used to check if animation is needed or not if activated
   Widget stepSelectedWidget(int i) {
+    // print(_stepDifference);
     if (widget.selectedStep == i &&
         (i != 0 || _isPreviousStep) &&
         widget.enableStepAnimation) {
       _animationControllerSelectedStep.forward();
 
       return SizedBox(
-        height: widget.selectedStepSize,
+        width: widget.direction == Axis.horizontal ? widget.doneStepSize : null,
+        height: widget.direction == Axis.vertical ? widget.doneStepSize : null,
         child: AnimatedBuilder(
           animation: _animationControllerSelectedStep,
           builder: (BuildContext context, Widget? child) {
             final size = widget.selectedStepSize *
                 _animationControllerSelectedStep.value;
+            final progress = _animationControllerSelectedStep.value;
 
             if (widget.selectedStepWidget != null) {
               return Container(
                   width: size,
                   height: size,
-                  child: widget.selectedStepWidget!(i));
+                  child: widget.selectedStepWidget!(i, progress));
             } else {
               return Container(
                 width: size,
@@ -399,7 +413,7 @@ class _StepsIndicatorState extends State<StepsIndicator>
       );
     }
     if (widget.selectedStepWidget != null) {
-      return widget.selectedStepWidget!(i);
+      return widget.selectedStepWidget!(i, null);
     } else {
       return StepWidget().generateSelectedStepWidget(
           colorIn: widget.selectedStepColorIn,
@@ -418,17 +432,24 @@ class _StepsIndicatorState extends State<StepsIndicator>
       _animationControllerDoneStep.forward();
 
       return SizedBox(
-        height: widget.doneStepSize,
-        // width : widget.doneStepSize,
+        width: widget.direction == Axis.horizontal ? widget.doneStepSize : null,
+        height: widget.direction == Axis.vertical ? widget.doneStepSize : null,
         child: AnimatedBuilder(
           animation: _animationControllerDoneStep,
           builder: (BuildContext context, Widget? child) {
-            final size =
-                widget.doneStepSize * _animationControllerDoneStep.value;
+            print(i);
+
+            final size = widget.doneStepSize;
+
+            // final size =
+            //     widget.doneStepSize * _animationControllerDoneStep.value;
+            final progress = _animationControllerSelectedStep.value;
 
             if (widget.doneStepWidget != null) {
               return Container(
-                  width: size, height: size, child: widget.doneStepWidget!(i));
+                  width: size,
+                  height: size,
+                  child: widget.doneStepWidget!(i, progress));
             } else {
               return Container(
                 width: size,
@@ -442,7 +463,7 @@ class _StepsIndicatorState extends State<StepsIndicator>
       );
     } else {
       if (widget.doneStepWidget != null) {
-        return widget.doneStepWidget!(i);
+        return widget.doneStepWidget!(i, null);
       } else {
         return StepWidget().generateSimpleStepWidget(
             color: widget.doneStepColor, size: widget.doneStepSize);
@@ -453,18 +474,48 @@ class _StepsIndicatorState extends State<StepsIndicator>
   /// A function to return the line done widget
   /// Index [i] is used to check if animation is needed or not if activated
   Widget stepLineDoneWidget(int i) {
+    /// Step Move Position
+    /// The move order of the line, line with value 1 means that the line
+    /// will be filled first, and they will be filled their respective order,
+    /// line with value of 0 means the line is not modified.
+    final int moveOrder =
+        max(0, i + 1 - (widget.selectedStep - _stepDifference));
+    // print(1 - max((i + 1 - (widget.selectedStep - _stepDifference))/_stepDifference,0));
+    final double _percentMin = max((moveOrder - 1) / _stepDifference, 0);
+    final double _percentMax = min(moveOrder / _stepDifference, 1);
+
+    final double progress;
+    if (widget.enableLineAnimation) {
+      if (_percentToNext < _percentMin) {
+        progress = 0;
+      } else if (_percentToNext > _percentMax) {
+        progress = 1;
+      } else {
+        progress = (_percentToNext - _percentMin) * _stepDifference;
+      }
+    } else {
+      progress = 1;
+    }
+
+    // final double progress =
+    //     widget.selectedStep == i + 1 && widget.enableLineAnimation
+    //         ? _percentToNext
+    //         : 1;
+
     return Container(
-      height: widget.isHorizontal ? widget.doneLineThickness : getLineLength(i),
-      width: widget.isHorizontal ? getLineLength(i) : widget.doneLineThickness,
+      height: widget.direction == Axis.horizontal
+          ? widget.doneLineThickness
+          : getLineLength(i),
+      width: widget.direction == Axis.horizontal
+          ? getLineLength(i)
+          : widget.doneLineThickness,
       child: CustomPaint(
         painter: LinearPainter(
-          progress: widget.selectedStep == i + 1 && widget.enableLineAnimation
-              ? _percentToNext
-              : 1,
+          direction: widget.direction,
+          progress: progress,
           progressColor: widget.doneLineColor,
           backgroundColor: widget.undoneLineColor,
-          lineThickness:
-              widget.isHorizontal ? widget.doneLineThickness : getLineLength(i),
+          lineThickness: widget.doneLineThickness,
         ),
       ),
     );
@@ -477,27 +528,30 @@ class _StepsIndicatorState extends State<StepsIndicator>
         widget.selectedStep == i &&
         widget.enableLineAnimation) {
       return Container(
-        height:
-            widget.isHorizontal ? widget.undoneLineThickness : getLineLength(i),
-        width:
-            widget.isHorizontal ? getLineLength(i) : widget.undoneLineThickness,
+        height: widget.direction == Axis.horizontal
+            ? widget.undoneLineThickness
+            : getLineLength(i),
+        width: widget.direction == Axis.horizontal
+            ? getLineLength(i)
+            : widget.undoneLineThickness,
         child: CustomPaint(
           painter: LinearPainter(
             progress: _percentToPrevious,
             progressColor: widget.doneLineColor,
             backgroundColor: widget.undoneLineColor,
-            lineThickness: widget.isHorizontal
-                ? widget.undoneLineThickness
-                : getLineLength(i),
+            direction: widget.direction,
+            lineThickness: widget.undoneLineThickness,
           ),
         ),
       );
     }
     return Container(
-        height:
-            widget.isHorizontal ? widget.undoneLineThickness : getLineLength(i),
-        width:
-            widget.isHorizontal ? getLineLength(i) : widget.undoneLineThickness,
+        height: widget.direction == Axis.horizontal
+            ? widget.undoneLineThickness
+            : getLineLength(i),
+        width: widget.direction == Axis.horizontal
+            ? getLineLength(i)
+            : widget.undoneLineThickness,
         color: widget.undoneLineColor);
   }
 
