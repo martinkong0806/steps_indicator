@@ -61,10 +61,14 @@ class StepsIndicator extends StatefulWidget {
 
   /// Unselected step border size [default = 14]
   final double unselectedStepBorderSize;
-  final Widget? doneStepWidget;
-  final Widget? unselectedStepWidget;
-  final Widget? selectedStepWidget;
+  final Widget Function(int)? doneStepWidget;
+  final Widget Function(int)? unselectedStepWidget;
+  final Widget Function(int)? selectedStepWidget;
   final List<StepsIndicatorCustomLine>? lineLengthCustomStep;
+
+  final AnimationController? animationControllerSelectedStep;
+  final AnimationController? animationControllerDoneStep;
+  final AnimationController? animationControllerUnselectedStep;
 
   /// Enable line animation [default = false]
   final bool enableLineAnimation;
@@ -95,6 +99,9 @@ class StepsIndicator extends StatefulWidget {
       this.unselectedStepWidget,
       this.selectedStepWidget,
       this.lineLengthCustomStep,
+      this.animationControllerSelectedStep,
+      this.animationControllerDoneStep,
+      this.animationControllerUnselectedStep,
       this.enableLineAnimation = false,
       this.enableStepAnimation = false});
 
@@ -130,12 +137,16 @@ class _StepsIndicatorState extends State<StepsIndicator>
         duration: const Duration(milliseconds: 400), vsync: this);
     _animationControllerToPrevious = AnimationController(
         duration: const Duration(milliseconds: 400), vsync: this);
-    _animationControllerSelectedStep = AnimationController(
-        duration: const Duration(milliseconds: 400), vsync: this);
-    _animationControllerDoneStep = AnimationController(
-        duration: const Duration(milliseconds: 400), vsync: this);
-    _animationControllerUnselectedStep = AnimationController(
-        duration: const Duration(milliseconds: 400), vsync: this);
+    _animationControllerSelectedStep = widget.animationControllerSelectedStep ??
+        AnimationController(
+            duration: const Duration(milliseconds: 400), vsync: this);
+    _animationControllerDoneStep = widget.animationControllerDoneStep ??
+        AnimationController(
+            duration: const Duration(milliseconds: 400), vsync: this);
+    _animationControllerUnselectedStep =
+        widget.animationControllerUnselectedStep ??
+            AnimationController(
+                duration: const Duration(milliseconds: 400), vsync: this);
   }
 
   /// Dispose all animation controller
@@ -312,35 +323,43 @@ class _StepsIndicatorState extends State<StepsIndicator>
   Widget stepUnselectedWidget(int i) {
     if (widget.selectedStep == i - 1 &&
         _isPreviousStep &&
-        widget.enableStepAnimation &&
-        widget.unselectedStepWidget == null) {
+        widget.enableStepAnimation) {
       _animationControllerUnselectedStep.forward();
 
       return AnimatedBuilder(
         animation: _animationControllerUnselectedStep,
         builder: (BuildContext context, Widget? child) {
-          final size = widget.unselectedStepSize *
-              _animationControllerUnselectedStep.value;
-          return Container(
-            width: size,
-            height: size,
-            child: widget.unselectedStepWidget ??
-                StepWidget().generateSelectedStepWidget(
-                    colorIn: widget.unselectedStepColorIn,
-                    colorOut: widget.unselectedStepColorOut,
-                    stepSize: widget.unselectedStepSize,
-                    borderSize: widget.unselectedStepBorderSize),
-          );
+          final size = widget.unselectedStepSize +
+              1 * _animationControllerUnselectedStep.value;
+          if (widget.unselectedStepWidget != null) {
+            return Container(
+                width: size,
+                height: size,
+                child: widget.unselectedStepWidget!(i));
+          } else {
+            return Container(
+              width: size,
+              height: size,
+              child: StepWidget().generateSelectedStepWidget(
+                  colorIn: widget.unselectedStepColorIn,
+                  colorOut: widget.unselectedStepColorOut,
+                  stepSize: widget.unselectedStepSize,
+                  borderSize: widget.unselectedStepBorderSize),
+            );
+          }
         },
       );
     }
 
-    return widget.unselectedStepWidget ??
-        StepWidget().generateSelectedStepWidget(
-            colorIn: widget.unselectedStepColorIn,
-            colorOut: widget.unselectedStepColorOut,
-            stepSize: widget.unselectedStepSize,
-            borderSize: widget.unselectedStepBorderSize);
+    if (widget.unselectedStepWidget != null) {
+      return widget.unselectedStepWidget!(i);
+    } else {
+      return StepWidget().generateSelectedStepWidget(
+          colorIn: widget.unselectedStepColorIn,
+          colorOut: widget.unselectedStepColorOut,
+          stepSize: widget.unselectedStepSize,
+          borderSize: widget.unselectedStepBorderSize);
+    }
   }
 
   /// A function to return the selected step widget
@@ -348,35 +367,46 @@ class _StepsIndicatorState extends State<StepsIndicator>
   Widget stepSelectedWidget(int i) {
     if (widget.selectedStep == i &&
         (i != 0 || _isPreviousStep) &&
-        widget.enableStepAnimation &&
-        widget.selectedStepWidget == null) {
+        widget.enableStepAnimation) {
       _animationControllerSelectedStep.forward();
 
-      return AnimatedBuilder(
-        animation: _animationControllerSelectedStep,
-        builder: (BuildContext context, Widget? child) {
-          final size =
-              widget.selectedStepSize * _animationControllerSelectedStep.value;
-          return Container(
-            width: size,
-            height: size,
-            child: widget.selectedStepWidget ??
-                StepWidget().generateSelectedStepWidget(
+      return SizedBox(
+        height: widget.selectedStepSize,
+        child: AnimatedBuilder(
+          animation: _animationControllerSelectedStep,
+          builder: (BuildContext context, Widget? child) {
+            final size = widget.selectedStepSize *
+                _animationControllerSelectedStep.value;
+
+            if (widget.selectedStepWidget != null) {
+              return Container(
+                  width: size,
+                  height: size,
+                  child: widget.selectedStepWidget!(i));
+            } else {
+              return Container(
+                width: size,
+                height: size,
+                child: StepWidget().generateSelectedStepWidget(
                     colorIn: widget.selectedStepColorIn,
                     colorOut: widget.selectedStepColorOut,
                     stepSize: widget.selectedStepSize,
                     borderSize: widget.selectedStepBorderSize),
-          );
-        },
+              );
+            }
+          },
+        ),
       );
     }
-
-    return widget.selectedStepWidget ??
-        StepWidget().generateSelectedStepWidget(
-            colorIn: widget.selectedStepColorIn,
-            colorOut: widget.selectedStepColorOut,
-            stepSize: widget.selectedStepSize,
-            borderSize: widget.selectedStepBorderSize);
+    if (widget.selectedStepWidget != null) {
+      return widget.selectedStepWidget!(i);
+    } else {
+      return StepWidget().generateSelectedStepWidget(
+          colorIn: widget.selectedStepColorIn,
+          colorOut: widget.selectedStepColorOut,
+          stepSize: widget.selectedStepSize,
+          borderSize: widget.selectedStepBorderSize);
+    }
   }
 
   /// A function to return the done step widget
@@ -384,28 +414,40 @@ class _StepsIndicatorState extends State<StepsIndicator>
   Widget stepDoneWidget(int i) {
     if (widget.selectedStep - 1 == i &&
         !_isPreviousStep &&
-        widget.enableStepAnimation &&
-        widget.doneStepWidget == null) {
+        widget.enableStepAnimation) {
       _animationControllerDoneStep.forward();
 
-      return AnimatedBuilder(
-        animation: _animationControllerDoneStep,
-        builder: (BuildContext context, Widget? child) {
-          final size = widget.doneStepSize * _animationControllerDoneStep.value;
-          return Container(
-            width: size,
-            height: size,
-            child: widget.doneStepWidget ??
-                StepWidget().generateSimpleStepWidget(
-                    color: widget.doneStepColor, size: widget.doneStepSize),
-          );
-        },
-      );
-    }
+      return SizedBox(
+        height: widget.doneStepSize,
+        // width : widget.doneStepSize,
+        child: AnimatedBuilder(
+          animation: _animationControllerDoneStep,
+          builder: (BuildContext context, Widget? child) {
+            final size =
+                widget.doneStepSize * _animationControllerDoneStep.value;
 
-    return widget.doneStepWidget ??
-        StepWidget().generateSimpleStepWidget(
+            if (widget.doneStepWidget != null) {
+              return Container(
+                  width: size, height: size, child: widget.doneStepWidget!(i));
+            } else {
+              return Container(
+                width: size,
+                height: size,
+                child: StepWidget().generateSimpleStepWidget(
+                    color: widget.doneStepColor, size: widget.doneStepSize),
+              );
+            }
+          },
+        ),
+      );
+    } else {
+      if (widget.doneStepWidget != null) {
+        return widget.doneStepWidget!(i);
+      } else {
+        return StepWidget().generateSimpleStepWidget(
             color: widget.doneStepColor, size: widget.doneStepSize);
+      }
+    }
   }
 
   /// A function to return the line done widget
